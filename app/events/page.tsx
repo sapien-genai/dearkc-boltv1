@@ -1,49 +1,86 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { MapWithClusters } from '@/components/MapWithClusters';
 import { EventCard } from '@/components/EventCard';
 import { Button } from '@/components/ui/button';
 import { Calendar as CalendarIcon } from 'lucide-react';
-import eventsData from '@/data/events.json';
 import { Event, Place } from '@/lib/types';
+import { fetchEvents } from '@/lib/api';
 
-const events = eventsData as Event[];
-
-const eventsAsPlaces: Place[] = events.map(event => ({
-  id: event.id,
-  name: event.title,
-  slug: event.slug,
-  category: 'Event',
-  subcategory: event.tags[0] || 'General',
-  neighborhood: event.address.city,
-  price_level: event.priceMin === 0 ? '$' : event.priceMin < 20 ? '$$' : '$$$',
-  rating: 0,
-  reviews: 0,
-  tags: event.tags,
-  address: event.address,
-  location: event.location,
-  hours: {},
-  images: event.images,
-  ai_summary: event.description,
-  featured: false
-}));
+type LoadState = 'idle' | 'loading' | 'error';
 
 export default function EventsPage() {
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loadState, setLoadState] = useState<LoadState>('idle');
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadEvents() {
+      try {
+        setLoadState('loading');
+        const fetchedEvents = await fetchEvents({ limit: 60 });
+        if (isMounted) {
+          setEvents(fetchedEvents);
+          setLoadState('idle');
+        }
+      } catch (error) {
+        if (isMounted) {
+          setLoadState('error');
+        }
+      }
+    }
+
+    loadEvents();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredEvents = useMemo(() => {
     if (selectedMonth === 'all') return events;
 
-    return events.filter(event => {
+    return events.filter((event) => {
       const eventDate = new Date(event.startsAt);
       const monthNum = eventDate.getMonth();
       return monthNum.toString() === selectedMonth;
     });
-  }, [selectedMonth]);
+  }, [events, selectedMonth]);
 
-  const sortedEvents = [...filteredEvents].sort((a, b) =>
-    new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+  const sortedEvents = useMemo(
+    () =>
+      [...filteredEvents].sort(
+        (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
+      ),
+    [filteredEvents]
+  );
+
+  const eventsAsPlaces: Place[] = useMemo(
+    () =>
+      events
+        .filter((event) => event.location)
+        .map((event) => ({
+          id: event.id,
+          name: event.title,
+          slug: event.slug,
+          category: 'Event',
+          subcategory: event.tags?.[0],
+          neighborhood: event.address?.city,
+          price_level: undefined,
+          rating: undefined,
+          reviews: undefined,
+          tags: event.tags,
+          address: event.address,
+          location: event.location ?? undefined,
+          hours: undefined,
+          images: event.image ? [event.image] : undefined,
+          ai_summary: event.description,
+          featured: false,
+        })),
+    [events]
   );
 
   return (
@@ -65,13 +102,19 @@ export default function EventsPage() {
               All Events
             </Button>
             {[
+              { label: 'January', value: '0' },
+              { label: 'February', value: '1' },
+              { label: 'March', value: '2' },
+              { label: 'April', value: '3' },
+              { label: 'May', value: '4' },
               { label: 'June', value: '5' },
               { label: 'July', value: '6' },
               { label: 'August', value: '7' },
               { label: 'September', value: '8' },
               { label: 'October', value: '9' },
-              { label: 'November', value: '10' }
-            ].map(month => (
+              { label: 'November', value: '10' },
+              { label: 'December', value: '11' },
+            ].map((month) => (
               <Button
                 key={month.value}
                 variant={selectedMonth === month.value ? 'default' : 'outline'}
@@ -84,35 +127,55 @@ export default function EventsPage() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[45%_55%] gap-6 mb-8">
-          <div>
-            <MapWithClusters
-              places={eventsAsPlaces}
-              className="h-[400px] lg:h-[500px] lg:sticky lg:top-24"
-            />
+        {loadState === 'error' ? (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-6 text-center">
+            Unable to load events right now. Please try again later.
           </div>
-
-          <div>
-            <div className="mb-4">
-              <p className="text-sm text-gray-600">
-                {sortedEvents.length} {sortedEvents.length === 1 ? 'event' : 'events'} found
-              </p>
+        ) : (
+          <div className="grid lg:grid-cols-[45%_55%] gap-6 mb-8">
+            <div>
+              {loadState === 'loading' && events.length === 0 ? (
+                <div className="h-[400px] lg:h-[500px] rounded-2xl bg-gray-100 animate-pulse" />
+              ) : (
+                <MapWithClusters
+                  places={eventsAsPlaces}
+                  className="h-[400px] lg:h-[500px] lg:sticky lg:top-24"
+                />
+              )}
             </div>
 
-            <div className="grid gap-4">
-              {sortedEvents.map(event => (
-                <EventCard key={event.id} event={event} />
-              ))}
-            </div>
-
-            {sortedEvents.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-xl text-gray-600 mb-2">No events found</p>
-                <p className="text-sm text-gray-500">Try selecting a different month</p>
+            <div>
+              <div className="mb-4">
+                <p className="text-sm text-gray-600">
+                  {loadState === 'loading'
+                    ? 'Loading events...'
+                    : `${sortedEvents.length} ${sortedEvents.length === 1 ? 'event' : 'events'} found`}
+                </p>
               </div>
-            )}
+
+              {loadState === 'loading' && events.length === 0 ? (
+                <div className="grid gap-4">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="h-48 rounded-2xl bg-gray-100 animate-pulse" />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {sortedEvents.map((event) => (
+                    <EventCard key={event.id} event={event} />
+                  ))}
+                </div>
+              )}
+
+              {sortedEvents.length === 0 && loadState !== 'loading' && (
+                <div className="text-center py-12">
+                  <p className="text-xl text-gray-600 mb-2">No events found</p>
+                  <p className="text-sm text-gray-500">Try selecting a different month</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </main>
   );
