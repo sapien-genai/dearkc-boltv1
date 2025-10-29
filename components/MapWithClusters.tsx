@@ -17,6 +17,8 @@ type MapWithClustersProps = {
   zoom?: number;
 };
 
+const DEFAULT_CENTER = [-94.5786, 39.0997] as const;
+
 const CATEGORY_COLORS: Record<string, string> = {
   BBQ: '#EF4444',
   Coffee: '#8B4513',
@@ -33,13 +35,18 @@ export function MapWithClusters({
   onSelect,
   showHeatmap = false,
   className = "",
-  center = [-94.5786, 39.0997],
+  center: providedCenter,
   zoom = 11
 }: MapWithClustersProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
+
+  const mapCenter = useMemo<[number, number]>(() => {
+    const [lng, lat] = providedCenter ?? DEFAULT_CENTER;
+    return [lng, lat];
+  }, [providedCenter?.[0], providedCenter?.[1]]);
 
   const placesWithLocation = useMemo(
     () =>
@@ -58,7 +65,7 @@ export function MapWithClusters({
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: center,
+      center: mapCenter,
       zoom: zoom
     });
 
@@ -86,7 +93,7 @@ export function MapWithClusters({
         map.current = null;
       }
     };
-  }, [center, zoom]);
+  }, [mapCenter, zoom]);
 
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
