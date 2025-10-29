@@ -17,7 +17,7 @@ type MapWithClustersProps = {
   zoom?: number;
 };
 
-const DEFAULT_CENTER = [-94.5786, 39.0997] as const;
+const DEFAULT_CENTER: [number, number] = [-94.5786, 39.0997];
 
 const CATEGORY_COLORS: Record<string, string> = {
   BBQ: '#EF4444',
@@ -36,14 +36,38 @@ export function MapWithClusters({
   showHeatmap = false,
   className = "",
   center: providedCenter,
-  zoom = 11
+  zoom: providedZoom
 }: MapWithClustersProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  const [centerLng, centerLat] = providedCenter ?? DEFAULT_CENTER;
+  const zoom = providedZoom ?? 11;
+  const isZoomControlled = providedZoom != null;
+
+  const providedLng = providedCenter?.[0];
+  const providedLat = providedCenter?.[1];
+  const hasProvidedCenter =
+    Number.isFinite(providedLng) && Number.isFinite(providedLat);
+
+  const resolvedCenter = useMemo<[number, number]>(
+    () =>
+      hasProvidedCenter
+        ? [providedLng as number, providedLat as number]
+        : DEFAULT_CENTER,
+    [hasProvidedCenter, providedLng, providedLat]
+  );
+
+  const initialCenterRef = useRef<[number, number]>(resolvedCenter);
+  const initialZoomRef = useRef<number>(zoom);
+
+  useEffect(() => {
+    if (map.current) return;
+
+    initialCenterRef.current = resolvedCenter;
+    initialZoomRef.current = zoom;
+  }, [resolvedCenter, zoom]);
 
   const placesWithLocation = useMemo(
     () =>
@@ -62,8 +86,8 @@ export function MapWithClusters({
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: [centerLng, centerLat],
-      zoom: zoom
+      center: initialCenterRef.current,
+      zoom: initialZoomRef.current
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -90,7 +114,7 @@ export function MapWithClusters({
         map.current = null;
       }
     };
-  }, [centerLng, centerLat, zoom]);
+  }, []);
 
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
@@ -158,6 +182,21 @@ export function MapWithClusters({
       markers.current.set(place.id, marker);
     });
   }, [placesWithLocation, selectedId, mapLoaded, onSelect]);
+
+  useEffect(() => {
+    if (!map.current || !mapLoaded || !hasProvidedCenter) return;
+
+    map.current.easeTo({
+      center: resolvedCenter,
+      duration: 500
+    });
+  }, [hasProvidedCenter, resolvedCenter, mapLoaded]);
+
+  useEffect(() => {
+    if (!map.current || !mapLoaded || !isZoomControlled) return;
+
+    map.current.setZoom(zoom);
+  }, [isZoomControlled, zoom, mapLoaded]);
 
   useEffect(() => {
     if (!map.current || !selectedId || !mapLoaded) return;
