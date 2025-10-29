@@ -43,10 +43,7 @@ export function MapWithClusters({
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
-  const mapCenter = useMemo<[number, number]>(() => {
-    const [lng, lat] = providedCenter ?? DEFAULT_CENTER;
-    return [lng, lat];
-  }, [providedCenter?.[0], providedCenter?.[1]]);
+  const [centerLng, centerLat] = providedCenter ?? DEFAULT_CENTER;
 
   const placesWithLocation = useMemo(
     () =>
@@ -65,7 +62,7 @@ export function MapWithClusters({
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: mapCenter,
+      center: [centerLng, centerLat],
       zoom: zoom
     });
 
@@ -93,7 +90,7 @@ export function MapWithClusters({
         map.current = null;
       }
     };
-  }, [mapCenter, zoom]);
+  }, [centerLng, centerLat, zoom]);
 
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
