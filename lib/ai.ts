@@ -39,13 +39,21 @@ export async function buildMyDay(places: Place[]): Promise<Itinerary> {
 
   const selectedPlaces = places.slice(0, 3);
 
+  const placesWithLocation = selectedPlaces.filter(
+    (place): place is Place & { location: NonNullable<Place['location']> } =>
+      Boolean(place.location)
+  );
+
   const stops: ItineraryStop[] = selectedPlaces.map((place, idx) => ({
     place,
     order: idx + 1,
     estimatedDuration: 60 + Math.floor(Math.random() * 60)
   }));
 
-  const route: [number, number][] = selectedPlaces.map(p => [p.location.lng, p.location.lat]);
+  const route: [number, number][] = placesWithLocation.map((place) => [
+    place.location.lng,
+    place.location.lat
+  ]);
 
   return {
     stops,

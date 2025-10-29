@@ -11,7 +11,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
   Sheet,
@@ -26,24 +25,22 @@ export type Filters = {
   categories: string[];
   neighborhood?: string;
   priceLevel?: string[];
-  openNow: boolean;
   minRating: number;
-  maxDistance: number;
 };
 
 type FiltersBarProps = {
   filters: Filters;
   onFiltersChange: (filters: Filters) => void;
   neighborhoods: string[];
+  categories: string[];
   className?: string;
 };
-
-const CATEGORIES = ['All', 'BBQ', 'Coffee', 'American', 'Arts', 'Nightlife', 'Outdoors'];
 
 export function FiltersBar({
   filters,
   onFiltersChange,
   neighborhoods,
+  categories,
   className = ""
 }: FiltersBarProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -59,6 +56,7 @@ export function FiltersBar({
     }
   };
 
+  const availableCategories = ['All', ...categories];
   const displayCategories = filters.categories.length === 0 ? ['All'] : filters.categories;
 
   return (
@@ -66,7 +64,7 @@ export function FiltersBar({
       <div className="flex items-center gap-3">
         <div className="flex-1 overflow-hidden">
           <CategoryChips
-            categories={CATEGORIES}
+            categories={availableCategories}
             selected={displayCategories}
             onSelect={handleCategorySelect}
           />
@@ -157,40 +155,15 @@ export function FiltersBar({
                 />
               </div>
 
-              <div>
-                <Label className="mb-3">Max Distance: {filters.maxDistance} mi</Label>
-                <Slider
-                  value={[filters.maxDistance]}
-                  onValueChange={([value]) =>
-                    onFiltersChange({ ...filters, maxDistance: value })
-                  }
-                  min={1}
-                  max={25}
-                  step={1}
-                  className="w-full"
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Label htmlFor="open-now">Open Now</Label>
-                <Switch
-                  id="open-now"
-                  checked={filters.openNow}
-                  onCheckedChange={(checked) =>
-                    onFiltersChange({ ...filters, openNow: checked })
-                  }
-                />
-              </div>
-
               <Button
                 variant="outline"
                 className="w-full"
                 onClick={() => {
                   onFiltersChange({
                     categories: [],
-                    openNow: false,
+                    neighborhood: undefined,
+                    priceLevel: undefined,
                     minRating: 0,
-                    maxDistance: 25
                   });
                   setIsOpen(false);
                 }}

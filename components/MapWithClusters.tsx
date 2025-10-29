@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Place } from '@/lib/types';
@@ -41,6 +41,17 @@ export function MapWithClusters({
   const markers = useRef<Map<string, mapboxgl.Marker>>(new Map());
   const [mapLoaded, setMapLoaded] = useState(false);
 
+  const placesWithLocation = useMemo(
+    () =>
+      places.filter(
+        place =>
+          place.location &&
+          Number.isFinite(place.location.lat) &&
+          Number.isFinite(place.location.lng)
+      ),
+    [places]
+  );
+
   useEffect(() => {
     if (!mapContainer.current || map.current) return;
 
@@ -64,13 +75,18 @@ export function MapWithClusters({
       setMapLoaded(true);
     });
 
+    const mapInstance = map.current;
+    const markersMap = markers.current;
+
     return () => {
-      markers.current.forEach(marker => marker.remove());
-      markers.current.clear();
-      map.current?.remove();
-      map.current = null;
+      markersMap.forEach(marker => marker.remove());
+      markersMap.clear();
+      mapInstance?.remove();
+      if (map.current === mapInstance) {
+        map.current = null;
+      }
     };
-  }, []);
+  }, [center, zoom]);
 
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
@@ -78,7 +94,10 @@ export function MapWithClusters({
     markers.current.forEach(marker => marker.remove());
     markers.current.clear();
 
-    places.forEach(place => {
+    placesWithLocation.forEach(place => {
+      const location = place.location;
+      if (!location) return;
+
       const el = document.createElement('div');
       el.className = 'marker';
       el.style.width = '32px';
@@ -87,7 +106,9 @@ export function MapWithClusters({
       el.style.cursor = 'pointer';
       el.style.transition = 'all 0.3s';
 
-      const color = CATEGORY_COLORS[place.category] || CATEGORY_COLORS.default;
+      const color = place.category
+        ? CATEGORY_COLORS[place.category] || CATEGORY_COLORS.default
+        : CATEGORY_COLORS.default;
       el.style.backgroundColor = color;
       el.style.border = '3px solid white';
       el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
@@ -117,7 +138,7 @@ export function MapWithClusters({
       });
 
       const marker = new mapboxgl.Marker(el)
-        .setLngLat([place.location.lng, place.location.lat])
+        .setLngLat([location.lng, location.lat])
         .setPopup(
           new mapboxgl.Popup({ offset: 25 })
             .setHTML(`
@@ -132,20 +153,20 @@ export function MapWithClusters({
 
       markers.current.set(place.id, marker);
     });
-  }, [places, selectedId, mapLoaded, onSelect]);
+  }, [placesWithLocation, selectedId, mapLoaded, onSelect]);
 
   useEffect(() => {
     if (!map.current || !selectedId || !mapLoaded) return;
 
-    const place = places.find(p => p.id === selectedId);
-    if (place) {
+    const place = placesWithLocation.find(p => p.id === selectedId);
+    if (place && place.location) {
       map.current.flyTo({
         center: [place.location.lng, place.location.lat],
         zoom: 14,
         duration: 1000
       });
     }
-  }, [selectedId, places, mapLoaded]);
+  }, [selectedId, placesWithLocation, mapLoaded]);
 
   if (!process.env.NEXT_PUBLIC_MAPBOX_TOKEN) {
     return (

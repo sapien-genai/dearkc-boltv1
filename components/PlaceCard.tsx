@@ -5,7 +5,9 @@ import { Place } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { MouseEvent } from 'react';
+import { FALLBACK_IMAGE_URL } from '@/lib/constants';
 
 type PlaceCardProps = {
   place: Place;
@@ -16,9 +18,20 @@ type PlaceCardProps = {
 export function PlaceCard({ place, onHover, className = "" }: PlaceCardProps) {
   const [isFavorited, setIsFavorited] = useState(false);
 
-  const handleFavorite = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsFavorited(!isFavorited);
+  const imageUrl = useMemo(
+    () => place.images?.[0] ?? FALLBACK_IMAGE_URL,
+    [place.images]
+  );
+
+  const rating = place.rating ?? 0;
+  const reviewCount = place.reviews ?? 0;
+  const priceLevel = place.price_level ?? '—';
+  const neighborhood = place.neighborhood ?? place.address?.city ?? 'Kansas City';
+  const category = place.category ?? 'Uncategorized';
+
+  const handleFavorite = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setIsFavorited((prev) => !prev);
   };
 
   return (
@@ -30,7 +43,7 @@ export function PlaceCard({ place, onHover, className = "" }: PlaceCardProps) {
       >
         <div className="relative aspect-[4/3] overflow-hidden">
           <img
-            src={place.images[0]}
+            src={imageUrl}
             alt={place.name}
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
           />
@@ -57,19 +70,19 @@ export function PlaceCard({ place, onHover, className = "" }: PlaceCardProps) {
           </div>
 
           <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-            <span className="font-medium">{place.category}</span>
+            <span className="font-medium">{category}</span>
             <span>•</span>
-            <span>{place.neighborhood}</span>
+            <span>{neighborhood}</span>
           </div>
 
           <div className="flex items-center gap-3 text-sm">
             <div className="flex items-center gap-1">
               <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-              <span className="font-semibold">{place.rating}</span>
-              <span className="text-gray-500">({place.reviews})</span>
+              <span className="font-semibold">{rating.toFixed(1)}</span>
+              <span className="text-gray-500">({reviewCount})</span>
             </div>
             <span className="text-gray-400">•</span>
-            <span className="font-medium text-gray-700">{place.price_level}</span>
+            <span className="font-medium text-gray-700">{priceLevel}</span>
           </div>
         </CardContent>
       </Card>

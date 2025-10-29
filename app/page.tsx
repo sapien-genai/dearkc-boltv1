@@ -1,24 +1,85 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SearchBar } from '@/components/SearchBar';
 import { MapWithClusters } from '@/components/MapWithClusters';
 import { Carousel } from '@/components/Carousel';
 import { PlaceCard } from '@/components/PlaceCard';
-import placesData from '@/data/places.json';
 import { Place } from '@/lib/types';
-
-const places = placesData as Place[];
-
-const featuredPlaces = places.filter(p => p.featured);
-const cultureHistoryPlaces = places.filter(p => p.category === 'Arts' || p.tags?.includes('historic')).slice(0, 6);
-const localFlavors = places.filter(p => p.category === 'BBQ' || p.category === 'Coffee' || p.category === 'American').slice(0, 6);
-const outdoorsFamilyPlaces = places.filter(p => p.category === 'Outdoors' || p.tags?.includes('family-friendly')).slice(0, 6);
+import { fetchBusinesses } from '@/lib/api';
 
 export default function Home() {
   const router = useRouter();
   const [hoveredPlaceId, setHoveredPlaceId] = useState<string | null>(null);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadPlaces() {
+      try {
+        setIsLoading(true);
+        const { places: fetchedPlaces } = await fetchBusinesses({ limit: 60, verified: true });
+        if (isMounted) {
+          setPlaces(fetchedPlaces);
+          setError(null);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError('Unable to load featured places right now. Please try again later.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadPlaces();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filterByKeywords = useMemo(
+    () =>
+      (keywords: string[]) =>
+        places.filter((place) => {
+          const haystack = [
+            place.category?.toLowerCase() ?? '',
+            place.subcategory?.toLowerCase() ?? '',
+            ...(place.tags?.map((tag) => tag.toLowerCase()) ?? []),
+            place.ai_summary?.toLowerCase() ?? '',
+          ].join(' ');
+
+          return keywords.some((keyword) => haystack.includes(keyword));
+        }),
+    [places]
+  );
+
+  const featuredPlaces = useMemo(
+    () => places.filter((place) => place.featured).slice(0, 12),
+    [places]
+  );
+
+  const cultureHistoryPlaces = useMemo(() => {
+    const matches = filterByKeywords(['art', 'museum', 'history', 'culture']);
+    return matches.length > 0 ? matches.slice(0, 6) : places.slice(0, 6);
+  }, [filterByKeywords, places]);
+
+  const localFlavors = useMemo(() => {
+    const matches = filterByKeywords(['food', 'bbq', 'coffee', 'dining']);
+    return matches.length > 0 ? matches.slice(0, 6) : places.slice(0, 6);
+  }, [filterByKeywords, places]);
+
+  const outdoorsFamilyPlaces = useMemo(() => {
+    const matches = filterByKeywords(['park', 'outdoor', 'trail', 'family']);
+    return matches.length > 0 ? matches.slice(0, 6) : places.slice(0, 6);
+  }, [filterByKeywords, places]);
 
   const handleSearch = (query: string) => {
     router.push(`/explore?q=${encodeURIComponent(query)}`);
@@ -41,56 +102,79 @@ export default function Home() {
               <div className="max-w-2xl mx-auto lg:mx-0">
                 <SearchBar onSearch={handleSearch} />
               </div>
+
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-full px-4 py-2 inline-block">
+                  {error}
+                </p>
+              )}
             </div>
           </div>
 
           <div className="lg:sticky lg:top-24">
-            <MapWithClusters
-              places={featuredPlaces}
-              selectedId={hoveredPlaceId || undefined}
-              onSelect={(id) => router.push(`/places/${places.find(p => p.id === id)?.slug}`)}
-              className="h-[400px] lg:h-[500px]"
-            />
+            {isLoading ? (
+              <div className="h-[400px] lg:h-[500px] rounded-2xl bg-gray-100 animate-pulse" />
+            ) : (
+              <MapWithClusters
+                places={featuredPlaces.length > 0 ? featuredPlaces : places}
+                selectedId={hoveredPlaceId || undefined}
+                onSelect={(id) => {
+                  const place = places.find((p) => p.id === id);
+                  if (place?.slug) {
+                    router.push(`/places/${place.slug}`);
+                  }
+                }}
+                className="h-[400px] lg:h-[500px]"
+              />
+            )}
           </div>
         </div>
 
-        <div className="space-y-12">
-          <Carousel title="Local culture & history">
-            {cultureHistoryPlaces.map(place => (
-              <div key={place.id} className="min-w-[280px] sm:min-w-[320px] snap-start">
-                <PlaceCard
-                  place={place}
-                  onHover={setHoveredPlaceId}
-                  className="h-full"
-                />
-              </div>
-            ))}
-          </Carousel>
+        {isLoading && places.length === 0 ? (
+          <div className="space-y-6">
+            <div className="h-64 rounded-3xl bg-gray-100 animate-pulse" />
+            <div className="h-64 rounded-3xl bg-gray-100 animate-pulse" />
+            <div className="h-64 rounded-3xl bg-gray-100 animate-pulse" />
+          </div>
+        ) : (
+          <div className="space-y-12">
+            <Carousel title="Local culture & history">
+              {cultureHistoryPlaces.map((place) => (
+                <div key={place.id} className="min-w-[280px] sm:min-w-[320px] snap-start">
+                  <PlaceCard
+                    place={place}
+                    onHover={setHoveredPlaceId}
+                    className="h-full"
+                  />
+                </div>
+              ))}
+            </Carousel>
 
-          <Carousel title="The best in local flavors">
-            {localFlavors.map(place => (
-              <div key={place.id} className="min-w-[280px] sm:min-w-[320px] snap-start">
-                <PlaceCard
-                  place={place}
-                  onHover={setHoveredPlaceId}
-                  className="h-full"
-                />
-              </div>
-            ))}
-          </Carousel>
+            <Carousel title="The best in local flavors">
+              {localFlavors.map((place) => (
+                <div key={place.id} className="min-w-[280px] sm:min-w-[320px] snap-start">
+                  <PlaceCard
+                    place={place}
+                    onHover={setHoveredPlaceId}
+                    className="h-full"
+                  />
+                </div>
+              ))}
+            </Carousel>
 
-          <Carousel title="Outdoors & family friendly">
-            {outdoorsFamilyPlaces.map(place => (
-              <div key={place.id} className="min-w-[280px] sm:min-w-[320px] snap-start">
-                <PlaceCard
-                  place={place}
-                  onHover={setHoveredPlaceId}
-                  className="h-full"
-                />
-              </div>
-            ))}
-          </Carousel>
-        </div>
+            <Carousel title="Outdoors & family friendly">
+              {outdoorsFamilyPlaces.map((place) => (
+                <div key={place.id} className="min-w-[280px] sm:min-w-[320px] snap-start">
+                  <PlaceCard
+                    place={place}
+                    onHover={setHoveredPlaceId}
+                    className="h-full"
+                  />
+                </div>
+              ))}
+            </Carousel>
+          </div>
+        )}
 
         <div className="mt-16 text-center">
           <button

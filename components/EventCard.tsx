@@ -5,6 +5,7 @@ import { Event } from '@/lib/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { FALLBACK_IMAGE_URL } from '@/lib/constants';
 
 type EventCardProps = {
   event: Event;
@@ -19,6 +20,10 @@ export function EventCard({ event, className = "" }: EventCardProps) {
     year: 'numeric'
   });
 
+  const imageUrl = event.image ?? FALLBACK_IMAGE_URL;
+  const addressLine = event.address?.street ?? event.address?.full ?? 'Kansas City, MO';
+  const isFree = !event.price || event.price.toLowerCase().includes('free');
+
   return (
     <Link href={`/events/${event.slug}`}>
       <Card
@@ -26,11 +31,11 @@ export function EventCard({ event, className = "" }: EventCardProps) {
       >
         <div className="relative aspect-video overflow-hidden">
           <img
-            src={event.images[0]}
+            src={imageUrl}
             alt={event.title}
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
           />
-          {event.priceMin === 0 && (
+          {isFree && (
             <Badge className="absolute top-3 left-3 bg-green-600 text-white border-0">
               Free
             </Badge>
@@ -50,13 +55,13 @@ export function EventCard({ event, className = "" }: EventCardProps) {
 
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-gray-400" />
-              <span className="line-clamp-1">{event.address.street}</span>
+              <span className="line-clamp-1">{addressLine}</span>
             </div>
 
-            {event.priceMin > 0 && (
+            {!isFree && event.price && (
               <div className="flex items-center gap-2">
                 <DollarSign className="h-4 w-4 text-gray-400" />
-                <span>From ${event.priceMin}</span>
+                <span>{event.price}</span>
               </div>
             )}
           </div>
