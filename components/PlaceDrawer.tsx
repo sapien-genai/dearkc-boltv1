@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { FALLBACK_IMAGE_URL } from '@/lib/constants';
 
 type PlaceDrawerProps = {
   place: Place | null;
@@ -21,10 +22,34 @@ type PlaceDrawerProps = {
 export function PlaceDrawer({ place, open, onClose }: PlaceDrawerProps) {
   if (!place) return null;
 
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${place.location.lat},${place.location.lng}`;
+  const imageUrl = place.images?.[0] ?? FALLBACK_IMAGE_URL;
+  const rating = place.rating ?? 0;
+  const reviews = place.reviews ?? 0;
+  const priceLevel = place.price_level ?? '—';
+  const neighborhood = place.neighborhood ?? place.address?.city;
+  const googleMapsUrl = place.location
+    ? `https://www.google.com/maps/search/?api=1&query=${place.location.lat},${place.location.lng}`
+    : place.address?.full
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address.full)}`
+    : undefined;
+
+  const hoursEntries: Array<[string, string]> = (() => {
+    if (!place.hours) return [];
+    if (typeof place.hours === 'string') {
+      return [['Hours', place.hours]];
+    }
+    return Object.entries(place.hours);
+  })();
 
   return (
-    <Sheet open={open} onOpenChange={onClose}>
+    <Sheet
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          onClose();
+        }
+      }}
+    >
       <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="text-2xl">{place.name}</SheetTitle>
@@ -33,7 +58,7 @@ export function PlaceDrawer({ place, open, onClose }: PlaceDrawerProps) {
         <div className="mt-4 space-y-4">
           <div className="relative aspect-video rounded-xl overflow-hidden">
             <img
-              src={place.images[0]}
+              src={imageUrl}
               alt={place.name}
               className="w-full h-full object-cover"
             />
@@ -48,51 +73,63 @@ export function PlaceDrawer({ place, open, onClose }: PlaceDrawerProps) {
               <Bookmark className="h-4 w-4 mr-2" />
               Add to List
             </Button>
-            <Button size="sm" className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600" asChild>
-              <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Directions
-              </a>
-            </Button>
+            {googleMapsUrl && (
+              <Button size="sm" className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600" asChild>
+                <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Directions
+                </a>
+              </Button>
+            )}
           </div>
 
           <div className="space-y-3 pt-4 border-t">
             <div className="flex items-center gap-2">
               <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-              <span className="font-semibold text-lg">{place.rating}</span>
-              <span className="text-gray-600">({place.reviews} reviews)</span>
+              <span className="font-semibold text-lg">{rating.toFixed(1)}</span>
+              <span className="text-gray-600">({reviews} reviews)</span>
             </div>
 
             <div className="flex items-center gap-2 text-gray-700">
               <DollarSign className="h-5 w-5 text-gray-400" />
-              <span>{place.price_level}</span>
+              <span>{priceLevel}</span>
               <span>•</span>
-              <span>{place.category}</span>
+              <span>{place.category ?? 'Uncategorized'}</span>
             </div>
 
             <div className="flex items-start gap-2 text-gray-700">
               <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
               <div>
-                <p>{place.address.street}</p>
-                <p>{place.address.city}, {place.address.state} {place.address.zip}</p>
-                <p className="text-sm text-gray-500 mt-1">{place.neighborhood}</p>
+                {place.address?.street && <p>{place.address.street}</p>}
+                {place.address?.city && (
+                  <p>
+                    {place.address.city}
+                    {place.address.state ? `, ${place.address.state}` : ''}
+                    {place.address.zip ? ` ${place.address.zip}` : ''}
+                  </p>
+                )}
+                {neighborhood && (
+                  <p className="text-sm text-gray-500 mt-1">{neighborhood}</p>
+                )}
               </div>
             </div>
 
-            <div className="flex items-start gap-2 text-gray-700">
-              <Clock className="h-5 w-5 text-gray-400 mt-0.5" />
-              <div className="text-sm">
-                <p className="font-medium mb-1">Hours</p>
-                <div className="space-y-1">
-                  {Object.entries(place.hours).map(([day, hours]) => (
-                    <div key={day} className="flex justify-between gap-4">
-                      <span className="capitalize text-gray-600">{day}</span>
-                      <span className="font-medium">{hours}</span>
-                    </div>
-                  ))}
+            {hoursEntries.length > 0 && (
+              <div className="flex items-start gap-2 text-gray-700">
+                <Clock className="h-5 w-5 text-gray-400 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium mb-1">Hours</p>
+                  <div className="space-y-1">
+                    {hoursEntries.map(([day, hours]) => (
+                      <div key={day} className="flex justify-between gap-4">
+                        <span className="capitalize text-gray-600">{day}</span>
+                        <span className="font-medium">{hours}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {place.tags && place.tags.length > 0 && (
@@ -108,12 +145,14 @@ export function PlaceDrawer({ place, open, onClose }: PlaceDrawerProps) {
             </div>
           )}
 
-          <div className="pt-4 border-t">
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4">
-              <p className="text-sm font-medium mb-2 text-purple-900">AI Summary</p>
-              <p className="text-sm text-gray-700">{place.ai_summary}</p>
+          {place.ai_summary && (
+            <div className="pt-4 border-t">
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4">
+                <p className="text-sm font-medium mb-2 text-purple-900">AI Summary</p>
+                <p className="text-sm text-gray-700">{place.ai_summary}</p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="pt-4">
             <Button className="w-full" variant="outline" asChild>

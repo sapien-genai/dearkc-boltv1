@@ -1,24 +1,67 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Calendar, MapPin, DollarSign, Clock, Share2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { MapWithClusters } from '@/components/MapWithClusters';
-import eventsData from '@/data/events.json';
 import { Event, Place } from '@/lib/types';
+import { fetchEventBySlug } from '@/lib/api';
+import { FALLBACK_IMAGE_URL } from '@/lib/constants';
 
-const events = eventsData as Event[];
+type LoadState = 'loading' | 'ready' | 'error';
 
 export default function EventDetailPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params.slug as string;
 
-  const event = events.find(e => e.slug === slug);
+  const [event, setEvent] = useState<Event | null>(null);
+  const [status, setStatus] = useState<LoadState>('loading');
 
-  if (!event) {
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadEvent() {
+      try {
+        setStatus('loading');
+        const fetchedEvent = await fetchEventBySlug(slug);
+        if (!isMounted) return;
+
+        if (fetchedEvent) {
+          setEvent(fetchedEvent);
+          setStatus('ready');
+        } else {
+          setStatus('error');
+        }
+      } catch (error) {
+        if (isMounted) {
+          setStatus('error');
+        }
+      }
+    }
+
+    loadEvent();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [slug]);
+
+  if (status === 'loading') {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="h-24 w-24 mx-auto rounded-full bg-gray-100 animate-pulse" />
+          <p className="text-gray-600">Loading event...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!event || status === 'error') {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -49,25 +92,33 @@ export default function EventDetailPage() {
     minute: '2-digit'
   })}`;
 
-  const eventAsPlace: Place = {
-    id: event.id,
-    name: event.title,
-    slug: event.slug,
-    category: 'Event',
-    subcategory: '',
-    neighborhood: event.address.city,
-    price_level: '$',
-    rating: 0,
-    reviews: 0,
-    address: event.address,
-    location: event.location,
-    hours: {},
-    images: event.images,
-    ai_summary: '',
-    featured: false
-  };
+  const eventAsPlace: Place | null = event.location
+    ? {
+        id: event.id,
+        name: event.title,
+        slug: event.slug,
+        category: 'Event',
+        subcategory: event.tags?.[0],
+        neighborhood: event.address?.city,
+        price_level: undefined,
+        rating: undefined,
+        reviews: undefined,
+        address: event.address,
+        location: event.location,
+        hours: undefined,
+        images: event.image ? [event.image] : undefined,
+        ai_summary: event.description,
+        featured: false,
+      }
+    : null;
 
-  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${event.location.lat},${event.location.lng}`;
+  const googleMapsUrl = event.location
+    ? `https://www.google.com/maps/search/?api=1&query=${event.location.lat},${event.location.lng}`
+    : event.address?.full
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address.full)}`
+    : undefined;
+
+  const imageUrl = event.image ?? FALLBACK_IMAGE_URL;
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -84,7 +135,7 @@ export default function EventDetailPage() {
         <div className="space-y-6">
           <div className="aspect-[21/9] rounded-2xl overflow-hidden">
             <img
-              src={event.images[0]}
+              src={imageUrl}
               alt={event.title}
               className="w-full h-full object-cover"
             />
@@ -131,21 +182,23 @@ export default function EventDetailPage() {
                     <DollarSign className="h-5 w-5 text-purple-600" />
                     Pricing
                   </h3>
-                  {event.priceMin === 0 ? (
+                  {(!event.price || event.price.toLowerCase().includes('free')) ? (
                     <Badge className="bg-green-600 text-white text-lg">Free Event</Badge>
                   ) : (
-                    <p className="text-2xl font-bold">From ${event.priceMin}</p>
+                    <p className="text-2xl font-bold">{event.price}</p>
                   )}
                 </CardContent>
               </Card>
             </div>
 
-            <Card className="mb-8">
-              <CardContent className="p-6">
-                <h3 className="font-bold text-lg mb-4">About This Event</h3>
-                <p className="text-gray-700 leading-relaxed">{event.description}</p>
-              </CardContent>
-            </Card>
+            {event.description && (
+              <Card className="mb-8">
+                <CardContent className="p-6">
+                  <h3 className="font-bold text-lg mb-4">About This Event</h3>
+                  <p className="text-gray-700 leading-relaxed">{event.description}</p>
+                </CardContent>
+              </Card>
+            )}
 
             <div>
               <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
@@ -153,25 +206,35 @@ export default function EventDetailPage() {
                 Location
               </h2>
               <div className="space-y-2 mb-4">
-                <p className="text-gray-700 font-medium">{event.address.street}</p>
-                <p className="text-gray-700">
-                  {event.address.city}, {event.address.state} {event.address.zip}
-                </p>
+                {event.address?.street && (
+                  <p className="text-gray-700 font-medium">{event.address.street}</p>
+                )}
+                {event.address?.city && (
+                  <p className="text-gray-700">
+                    {event.address.city}
+                    {event.address.state ? `, ${event.address.state}` : ''}
+                    {event.address.zip ? ` ${event.address.zip}` : ''}
+                  </p>
+                )}
               </div>
-              <div className="rounded-2xl overflow-hidden mb-4">
-                <MapWithClusters
-                  places={[eventAsPlace]}
-                  center={[event.location.lng, event.location.lat]}
-                  zoom={14}
-                  className="h-[400px]"
-                />
-              </div>
-              <Button className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-pink-600" asChild>
-                <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Get Directions
-                </a>
-              </Button>
+              {eventAsPlace && (
+                <div className="rounded-2xl overflow-hidden mb-4">
+                  <MapWithClusters
+                    places={[eventAsPlace]}
+                    center={[eventAsPlace.location!.lng, eventAsPlace.location!.lat]}
+                    zoom={14}
+                    className="h-[400px]"
+                  />
+                </div>
+              )}
+              {googleMapsUrl && (
+                <Button className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-pink-600" asChild>
+                  <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Get Directions
+                  </a>
+                </Button>
+              )}
             </div>
           </div>
         </div>
